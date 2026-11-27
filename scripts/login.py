@@ -1,4 +1,4 @@
-"""以服务大厅为入口演示统一认证登录流程。
+"""以业务系统入口演示统一认证登录流程。
 
 这是参考实现，不是对外 SDK。需要验证码或重复登录处理时，可以按需复制本文件
 中的函数到自己项目里修改；``Client.login`` 本身仍然保持最小行为。
@@ -6,7 +6,6 @@
 
 import getpass
 import html
-import json
 import re
 import sys
 import urllib.error
@@ -22,7 +21,6 @@ from hebuee_auth import AuthenticationError, CaptchaRequired, Client
 from hebuee_auth.client import AUTH_HOST, LoginForm, encrypt_password
 
 SERVICE_URL = "https://ehall.hebuee.edu.cn/qljfwappnew/sys/lwPsMyCurriculum/*default/index.do"
-USER_INFO_URL = "https://ehall.hebuee.edu.cn/jsonp/userInfo.json"
 MAX_CAPTCHA_ATTEMPTS = 3
 CAPTCHA_MESSAGES = ("无效的验证码", "请输入验证码")
 KICKOUT_MESSAGE = "踢出会话"
@@ -36,7 +34,7 @@ def solve_captcha(image):
         try:
             import ddddocr
         except ImportError as error:
-            raise AuthenticationError("未安装 ddddocr，请用 uv run --with ddddocr 运行本示例。") from error
+            raise AuthenticationError("未安装 ddddocr，需使用 uv run --with ddddocr 运行本示例。") from error
         _recognizer = ddddocr.DdddOcr(show_ad=False)
     return _recognizer.classification(image).strip()
 
@@ -81,31 +79,17 @@ def login_with_captcha(client, service_url, username, password):
     raise CaptchaRequired("验证码连续识别失败，请稍后重试")
 
 
-def verify_session(client):
-    """通过服务大厅用户信息确认当前会话并返回姓名。"""
-    _, text = client.request(USER_INFO_URL)
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise AuthenticationError("无法解析服务大厅的会话验证响应。") from exc
-    if not isinstance(data, dict) or data.get("hasLogin") is not True:
-        raise AuthenticationError("服务大厅未确认当前会话已登录。")
-    name = data.get("userName")
-    return name.strip() if isinstance(name, str) and name.strip() else None
-
-
 def main():
-    """交互读取凭据并验证服务大厅的认证跳转。"""
+    """交互读取凭据并完成统一认证登录。"""
     username = input("学号或工号：").strip()
     password = getpass.getpass("密码（输入时不会显示）：")
     client = Client(service_hosts={"ehall.hebuee.edu.cn"})
     try:
-        login_with_captcha(client, SERVICE_URL, username, password)
-        name = verify_session(client)
+        url, _ = login_with_captcha(client, SERVICE_URL, username, password)
     except (AuthenticationError, urllib.error.URLError, TimeoutError, OSError) as exc:
         print(f"登录未完成：{exc}")
         return 1
-    print(f"统一身份认证登录成功，已通过服务大厅验证{'：' + name if name else '。'}")
+    print(f"统一身份认证登录成功，最终地址：{url}")
     return 0
 
 
